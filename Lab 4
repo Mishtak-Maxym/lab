@@ -1,1 +1,42 @@
+import numpy as np
+
+m_n = np.array([50, 40, 50, 50, 40, 30, 40, 30, 50, 30], dtype=float)   
+sigma_n = np.array([20, 15, 20, 20, 15, 12, 15, 14, 20, 13], dtype=float)  
+m_q = np.array([10]*10, dtype=float)  
+x_n = np.array([80, 60, 120, 75, 70, 110, 90, 70, 85, 55], dtype=float)    
+sigma_pn = np.array([15, 11, 15, 12, 10, 5, 12, 8, 10, 11], dtype=float)   
+
+x = x_n / 100.0
+m_p = x * m_n + (1 - x) * m_q
+sigma_p = x * sigma_n
+
+x_star = sigma_pn / sigma_n
+m_p_star = x_star * m_n + (1 - x_star) * m_q
+bond_share = 1 - x_star
+
+print("№ | x_n% | m_p%  | sigma_p% | sigma_pn% | x*%    | bonds% | m_p*%")
+print("--+------+-------+----------+-----------+--------+--------+------")
+for i in range(10):
+    print(f"{i+1:>1} | "
+    
+          f"{x_n[i]:>4.0f} | "
+          
+          f"{m_p[i]:>5.2f} | "
+          
+          f"{sigma_p[i]:>8.2f} | "
+          
+          f"{sigma_pn[i]:>9.0f} | "
+          
+          f"{(x_star[i]*100):>6.2f} | "
+          
+          f"{(bond_share[i]*100):>6.2f} | "
+          
+          f"{m_p_star[i]:>5.2f}")
+
+k = 3  
+i = k - 1
+print("\nОкремо для варіанта", k)
+print(f"п.1: x={x[i]:.2f} => m_p={m_p[i]:.2f}%, sigma_p={sigma_p[i]:.2f}%")
+print(f"п.2: sigma_pn={sigma_pn[i]:.2f}% => x*={x_star[i]:.4f} ({x_star[i]*100:.2f}%)")
+print(f"    облігації={bond_share[i]*100:.2f}%, m_p*={m_p_star[i]:.2f}%")
 

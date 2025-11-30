@@ -1,1 +1,19 @@
+p_fav_1, profit_fav_1 = 0.4, 40
+p_unf_1, profit_unf_1 = 0.6, 30
+
+p_fav_2, profit_fav_2 = 0.8, 35
+p_unf_2, profit_unf_2 = 0.2, 25
+
+E1 = p_fav_1 * profit_fav_1 + p_unf_1 * profit_unf_1
+E2 = p_fav_2 * profit_fav_2 + p_unf_2 * profit_unf_2
+
+print("E1 =", E1)
+print("E2 =", E2)
+
+if E1 > E2:
+    print("Залишити торгову точку 1, ліквідувати торгову точку 2.")
+elif E2 > E1:
+    print("Залишити торгову точку 2, ліквідувати торгову точку 1.")
+else:
+    print("Обидві точки рівні за очікуваним прибутком (байдуже яку залишати).")
 

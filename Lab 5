@@ -1,0 +1,70 @@
+import numpy as np
+
+F = np.array([
+    [3, 6, 5, 6],
+    [1, 3, 9, 5],
+    [4, 1, 8, 4]
+], dtype=float)
+
+p = np.array([0.2, 0.3, 0.25, 0.25], dtype=float)
+
+def bayes_expectation(F, p):
+    E = F @ p
+    best = np.argmin(E)
+    return E, best
+def hodges_lehmann(F, p, alpha):
+    worst = F.max(axis=1)
+    E = F @ p
+    HL = alpha * worst + (1 - alpha) * E
+    best = np.argmin(HL)
+    return HL, best, worst, E
+def germeyer_modified_wald(F, p):
+    G = (F * p).max(axis=1)
+    best = np.argmin(G)
+    return G, best
+def savage_modified(F, p):
+    col_min = F.min(axis=0)
+    R = F - col_min
+    S = (R * p).max(axis=1)
+    best = np.argmin(S)
+    return R, S, best, col_min
+def find_hl_switch_points(F, p, grid_step=1e-4):
+    alphas = np.arange(0.0, 1.0 + grid_step, grid_step)
+    bests=[]
+    for a in alphas:
+        _, b, _, _ = hodges_lehmann(F, p, a)
+        bests.append(b)
+    segments = []
+    start = 0
+    for i in range(1, len(alphas)):
+        if bests[i] != bests[i-1]:
+            segments.append((alphas[start], alphas[i-1], bests[i-1]))
+            start = i
+    segments.append((alphas[start], alphas[-1], bests[-1]))
+    return segments
+
+def fmt_choice(idx):
+    return f"x{idx+1}"
+E, best_E = bayes_expectation(F, p)
+print("Байєс (мат. сподівання) E:", E, "-> best:", fmt_choice(best_E))
+
+alpha = 0.5  
+HL, best_HL, worst, E2 = hodges_lehmann(F, p, alpha)
+print(f"\nХоджес–Леман alpha={alpha}")
+print("worst:", worst)
+print("E    :", E2)
+print("HL   :", HL, "-> best:", fmt_choice(best_HL))
+
+G, best_G = germeyer_modified_wald(F, p)
+print("\nНайгірший випадок  G:", G, "-> best:", fmt_choice(best_G))
+
+R, S, best_S, col_min = savage_modified(F, p)
+print("\nНайменших витрат")
+print("min по стовпцях:", col_min)
+print("R (regret):\n", R)
+print("S:", S, "-> best:", fmt_choice(best_S))
+
+segments = find_hl_switch_points(F, p, grid_step=1e-4)
+print("\nІнтервали alpha, де найкращий вибір HL не змінюється:")
+for a0, a1, b in segments:
+    print(f"[{a0:.4f}, {a1:.4f}] -> {fmt_choice(b)}")

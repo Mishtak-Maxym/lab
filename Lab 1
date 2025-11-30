@@ -1,1 +1,120 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
 
+plt.rcParams["font.family"] = "DejaVu Sans"
+ACTIONS = ["Пікнік", "Не пікнік"]
+STATES = ["Сухо", "Дощ"]
+M0 = np.array([
+    [10.0, -20.0],
+    [ 2.0,   5.0],
+], dtype=float)
+def expected_utilities(M, p):
+    return (1.0 - p) * M[:, 0] + p * M[:, 1]
+def compute_curves(M, grid):
+    return (1.0 - grid)[None, :] * M[:, [0]] + grid[None, :] * M[:, [1]]
+def best_action_indices(EU_curves):
+    return np.argmax(EU_curves, axis=0)
+def find_switch_points(best_idx, grid):
+    changes = np.where(np.diff(best_idx) != 0)[0]
+    return [float(grid[i]) for i in changes]
+fig = plt.figure(figsize=(12, 6))
+ax = fig.add_axes([0.07, 0.40, 0.56, 0.55])
+ax.set_title("Корисність (очікувана) vs ймовірність дощу p")
+ax.set_xlabel("p = P(дощ)")
+ax.set_ylabel("Очікувана корисність")
+ax.set_xlim(0, 1)
+ax.grid(True, alpha=0.3)
+ax_dist = fig.add_axes([0.68, 0.40, 0.30, 0.55])
+ax_dist.set_title("Внески у EU для вибраного p")
+ax_dist.set_xlabel("Стан")
+ax_dist.set_ylabel("Внесок (ймовірність × корисність)")
+ax_dist.grid(True, axis="y", alpha=0.3)
+p_grid = np.linspace(0, 1, 501)
+
+M = M0.copy()
+EU_curves = compute_curves(M, p_grid)
+best_EU = np.max(EU_curves, axis=0)
+
+lines_actions = []
+for i, name in enumerate(ACTIONS):
+    (ln,) = ax.plot(p_grid, EU_curves[i], linewidth=2, label=f"EU: {name}")
+    lines_actions.append(ln)
+
+(line_best,) = ax.plot(p_grid, best_EU, linewidth=3, label="EU оптимального рішення")
+p0_init = 0.25
+vline = ax.axvline(p0_init, linestyle="--", linewidth=2)
+pts = []
+for _ in range(len(ACTIONS)):
+    (pt,) = ax.plot([p0_init], [0], marker="o")
+    pts.append(pt)
+(pt_best,) = ax.plot([p0_init], [0], marker="o", markersize=10)
+info = ax.text(
+    0.02, 0.98, "", transform=ax.transAxes, va="top",
+    bbox=dict(boxstyle="round", alpha=0.15)
+)
+
+ax.legend(loc="lower left")
+plt.subplots_adjust(bottom=0.30)
+def add_slider(rect, label, vmin, vmax, valinit, valfmt="%.1f"):
+    axs = fig.add_axes(rect)
+    return Slider(axs, label, vmin, vmax, valinit=valinit, valfmt=valfmt)
+s_u_pd = add_slider([0.07, 0.25, 0.56, 0.03], "U(Пікнік, Сухо)", -50, 50, M0[0, 0])
+s_u_pr = add_slider([0.07, 0.20, 0.56, 0.03], "U(Пікнік, Дощ)",  -50, 50, M0[0, 1])
+s_u_nd = add_slider([0.07, 0.15, 0.56, 0.03], "U(Не пікнік, Сухо)", -50, 50, M0[1, 0])
+s_u_nr = add_slider([0.07, 0.10, 0.56, 0.03], "U(Не пікнік, Дощ)",  -50, 50, M0[1, 1])
+s_p0   = add_slider([0.07, 0.05, 0.56, 0.03], "Поточне p", 0.0, 1.0, p0_init, valfmt="%.2f")
+bars = ax_dist.bar(STATES, [0, 0])
+dist_text = ax_dist.text(
+    0.02, 0.98, "", transform=ax_dist.transAxes, va="top",
+    bbox=dict(boxstyle="round", alpha=0.15)
+)
+
+def update(_=None):
+    M[0, 0] = s_u_pd.val
+    M[0, 1] = s_u_pr.val
+    M[1, 0] = s_u_nd.val
+    M[1, 1] = s_u_nr.val
+    p0 = float(s_p0.val)
+    EU_curves_new = compute_curves(M, p_grid)
+    best_idx_new = best_action_indices(EU_curves_new)
+    best_EU_new = np.max(EU_curves_new, axis=0)
+    for i, ln in enumerate(lines_actions):
+        ln.set_ydata(EU_curves_new[i])
+    line_best.set_ydata(best_EU_new)
+    vline.set_xdata([p0, p0])
+    EU_p0 = expected_utilities(M, p0)
+    for i, pt in enumerate(pts):
+        pt.set_xdata([p0])
+        pt.set_ydata([EU_p0[i]])
+    best_i = int(np.argmax(EU_p0))
+    pt_best.set_xdata([p0])
+    pt_best.set_ydata([EU_p0[best_i]])
+    switch_pts = find_switch_points(best_idx_new, p_grid)
+
+    info.set_text(
+        f"p = {p0:.2f}\n"
+        f"EU(Пікнік) = {EU_p0[0]:.3f}\n"
+        f"EU(Не пікнік) = {EU_p0[1]:.3f}\n"
+        f"Оптимально: {ACTIONS[best_i]}\n"
+        f"Точки зміни рішення (≈): " + (", ".join(f"{x:.2f}" for x in switch_pts) if switch_pts else "нема")
+    )
+    udry = M[best_i, 0]
+    urain = M[best_i, 1]
+    contribs = np.array([(1 - p0) * udry, p0 * urain], dtype=float)
+    for b, h in zip(bars, contribs):
+        b.set_height(h)
+    dist_text.set_text(
+        f"Дія: {ACTIONS[best_i]}\n"
+        f"(1-p)·U(Сухо) = {contribs[0]:.3f}\n"
+        f"p·U(Дощ) = {contribs[1]:.3f}\n"
+        f"EU = {contribs.sum():.3f}"
+    )
+    lim = max(1.0, float(np.max(np.abs(contribs))) * 1.4)
+    ax_dist.set_ylim(-lim, lim)
+    fig.canvas.draw_idle()
+for s in (s_u_pd, s_u_pr, s_u_nd, s_u_nr, s_p0):
+    s.on_changed(update)
+
+update()
+plt.show()

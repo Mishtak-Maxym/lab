@@ -1,0 +1,154 @@
+import numpy as np
+X = ["x1", "x2", "x3", "x4"]
+situations = {
+    "I1": {
+        "p": np.array([0.30, 0.50, 0.20]),
+        "criteria": [
+            ("bayes", 0.50, {}),
+            ("savage", 0.30, {}),
+            ("hurwicz", 0.20, {"alpha": 0.6}),
+        ],
+        "w_func": {"F1": 0.65, "F2": 0.35},
+        "functionals": {
+            "F1": {
+                "sense": "max",
+                "A": np.array([
+                    [85, 90, 70],
+                    [80, 95, 60],
+                    [92, 88, 55],
+                    [75, 82, 65]
+                ], dtype=float)
+            },
+            "F2": {
+                "sense": "min",
+                "A": np.array([
+                    [30, 35, 40],
+                    [28, 42, 45],
+                    [33, 38, 55],
+                    [25, 40, 48]
+                ], dtype=float)
+            }
+        }
+    },
+    "I2": {
+        "p": np.array([0.15, 0.25, 0.40, 0.20]),
+        "criteria": [
+            ("bayes", 0.40, {}),
+            ("wald", 0.35, {}),
+            ("hodges_lehmann", 0.25, {"alpha": 0.5}),
+        ],
+        "w_func": {"F1": 0.55, "F2": 0.45},
+        "functionals": {
+            "F1": {
+                "sense": "max",
+                "A": np.array([
+                    [60, 75, 40, 55],
+                    [58, 80, 35, 52],
+                    [70, 65, 30, 50],
+                    [55, 72, 38, 48]
+                ], dtype=float)
+            },
+            "F2": {
+                "sense": "min",
+                "A": np.array([
+                    [50, 60, 70, 55],
+                    [48, 65, 78, 58],
+                    [52, 62, 85, 60],
+                    [45, 68, 80, 57]
+                ], dtype=float)
+            }
+        }
+    }
+}
+
+w_sit = {"I1": 0.55, "I2": 0.45}
+def bayes(A, p):
+    return A @ p
+def laplace(A):
+    return A.mean(axis=1)
+def wald(A, sense):
+    return A.min(axis=1) if sense == "max" else A.max(axis=1)
+def savage(A, sense):
+    if sense == "max":
+        best = A.max(axis=0)
+        R = best - A
+    else:
+        best = A.min(axis=0)
+        R = A - best
+    return R.max(axis=1)
+def hurwicz(A, sense, alpha):
+    row_max = A.max(axis=1)
+    row_min = A.min(axis=1)
+    return alpha * row_max + (1 - alpha) * row_min if sense == "max" else alpha * row_min + (1 - alpha) * row_max
+def hodges_lehmann(A, p, sense, alpha):
+    return alpha * wald(A, sense) + (1 - alpha) * bayes(A, p)
+def normalize(v, objective="max"):
+    v = np.array(v, dtype=float)
+    mn, mx = v.min(), v.max()
+    if abs(mx - mn) < 1e-12:
+        return np.ones_like(v) * 0.5
+    if objective == "max":
+        return (v - mn) / (mx - mn)
+    else:
+        return (mx - v) / (mx - mn)
+def criterion_score(A, p, sense, crit_name, params):
+    if crit_name == "bayes":
+        return bayes(A, p), "max" if sense == "max" else "min"
+    if crit_name == "laplace":
+        return laplace(A), "max" if sense == "max" else "min"
+    if crit_name == "wald":
+        return wald(A, sense), "max" if sense == "max" else "min"
+    if crit_name == "savage":
+        return savage(A, sense), "min"
+    if crit_name == "hurwicz":
+        alpha = float(params.get("alpha", 0.5))
+        return hurwicz(A, sense, alpha), "max" if sense == "max" else "min"
+    if crit_name == "hodges_lehmann":
+        alpha = float(params.get("alpha", 0.5))
+        return hodges_lehmann(A, p, sense, alpha), "max" if sense == "max" else "min"
+    raise ValueError(f"Невідомий критерій: {crit_name}")
+def weighted_sum(vectors, weights):
+    weights = np.array(weights, dtype=float)
+    weights = weights / weights.sum()
+    M = np.vstack(vectors)
+    return weights @ M
+def norm_weights_dict(d):
+    s = sum(d.values())
+    return {k: v / s for k, v in d.items()}
+w_sit = norm_weights_dict(w_sit)
+final_by_situation = {}
+for sit_name, sit in situations.items():
+    p = sit["p"]
+    crits = sit["criteria"]
+    w_func = norm_weights_dict(sit["w_func"])
+    funcs = sit["functionals"]
+    func_util = {}
+    for fname, f in funcs.items():
+        A = f["A"]
+        sense = f["sense"]
+        crit_utils = []
+        crit_w = []
+        for (cname, cw, params) in crits:
+            raw, obj = criterion_score(A, p, sense, cname, params)
+            crit_utils.append(normalize(raw, objective=obj))
+            crit_w.append(cw)
+        func_util[fname] = weighted_sum(crit_utils, crit_w)
+
+    vectors = [func_util[fname] for fname in w_func.keys()]
+    weights = [w_func[fname] for fname in w_func.keys()]
+    final_by_situation[sit_name] = weighted_sum(vectors, weights)
+sit_vectors = [final_by_situation[s] for s in w_sit.keys()]
+sit_weights = [w_sit[s] for s in w_sit.keys()]
+U = weighted_sum(sit_vectors, sit_weights)
+
+order = np.argsort(-U)
+print("Підсумок корисності:")
+for i, x in enumerate(X):
+    print(f"{x}: {U[i]:.6f}")
+
+print("\nРейтинг:")
+for rank, idx in enumerate(order, 1):
+    print(f"{rank}) {X[idx]}  (U={U[idx]:.6f})")
+
+best = int(order[0])
+print(f"\nКомпромісне Рішення: {X[best]}")
